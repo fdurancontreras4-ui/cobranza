@@ -3,12 +3,12 @@
 Herramienta de una sola página (`index.html`, sin dependencias) para armar el estado de cuenta de un cliente y pegarlo en un correo.
 
 ## Cómo se usa
-1. **Pega la cartera** copiada desde Excel (con encabezados: Razón Social, N° Docto, F Emisión, F Venc, Moneda, Total, Estado). Puede incluir varios clientes. Columnas opcionales: RFC, Abono, Fecha Abono, Saldo.
-2. **Elige el cliente**, escribe su RFC (se recuerda en el navegador) y revisa la fecha de corte (por defecto, hoy).
+1. **Pega la cartera** copiada desde Excel (con encabezados: Razón Social, N° Docto, F Emisión, F Venc, Moneda, Total, Estado y opcionalmente Monto Pagado, Fecha de Pago, Banco, RFC, Saldo). Las facturas CANCELADAS o pagadas por completo quedan fuera.
+2. **Marca las razones sociales del cliente** (busca, por ejemplo, "EULEN" y pulsa "Marcar las que se ven"), escribe el RFC de cada una (se recuerda en el navegador) y revisa la fecha de corte.
 3. **Revisa las facturas**: desmarca las que no quieras incluir. En las **ABONADAS** escribe el monto abonado y la fecha del abono; el saldo se calcula solo.
 4. **Copiar para pegar en el correo** → pega en Outlook/Gmail.
 
-El correo separa automáticamente **facturas vencidas** (con días de atraso) y **facturas vigentes**, resalta las abonadas (total, abonado, fecha de abono y saldo pendiente), agrega un resumen de saldo por moneda y los datos de pago.
+El correo separa **facturas vencidas** y **vigentes** (el título muestra cuántas son y el monto total) y, dentro de cada una, arma **una tabla por razón social** con su subtotal. Las abonadas muestran total, abonado, fecha de abono y saldo pendiente. Al final hay un resumen de saldo por razón social y los datos de pago.
 
 ## Publicar en GitHub Pages
 1. Crea un repositorio y sube `index.html` y este `README.md`.
