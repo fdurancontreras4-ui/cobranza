@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estado de Cuenta Cobranza</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --card: #ffffff; --text: #1f2937; --muted: #6b7280;
+    --line: #e5e7eb; --brand: #4ba3db; --brand-dark: #2b7fb8;
+    --danger: #c0392b; --ok: #1e8449; --warn-bg: #fff8e1;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; font-size: 14px; }
+  header { background: var(--brand); color: #fff; padding: 18px 24px; }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 4px 0 0; opacity: .9; }
+  main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 60px; display: grid; gap: 18px; }
+  .card { background: var(--card); border-radius: 12px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .card h2 { margin: 0 0 12px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .step { background: var(--brand); color: #fff; border-radius: 50%; width: 24px; height: 24px;
+          display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
+  textarea, input, select { font: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; background: #fff; color: var(--text); }
+  textarea { min-height: 140px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 13px; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  button { font: inherit; border: 0; border-radius: 8px; padding: 9px 16px; cursor: pointer; background: var(--brand); color: #fff; font-weight: 600; }
+  button:hover { background: var(--brand-dark); }
+  button.secondary { background: #e8f2fa; color: var(--brand-dark); }
+  .muted { color: var(--muted); font-size: 12px; }
+  .msg { padding: 8px 12px; border-radius: 8px; font-size: 13px; }
+  .msg.err { background: #fdecea; color: var(--danger); }
+  .msg.ok { background: #e9f7ef; color: var(--ok); }
+  .msg.warn { background: var(--warn-bg); color: #8a6d00; }
+  .tablewrap { overflow-x: auto; }
+  table.edit { border-collapse: collapse; width: 100%; min-width: 900px; }
+  table.edit th { text-align: left; font-size: 12px; color: var(--muted); border-bottom: 2px solid var(--line); padding: 6px; }
+  table.edit td { border-bottom: 1px solid var(--line); padding: 6px; vertical-align: middle; }
+  table.edit td input { padding: 5px 7px; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .pill.venc { background: #fdecea; color: var(--danger); }
+  .pill.vig { background: #e8f2fa; color: var(--brand-dark); }
+  .pill.abo { background: var(--warn-bg); color: #8a6d00; }
+  #preview { border: 1px dashed var(--line); border-radius: 8px; padding: 16px; background: #fff; overflow-x: auto; }
+  details summary { cursor: pointer; font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Estado de Cuenta — Generador para correo</h1>
+  <p>Pega la cartera desde Excel, elige el cliente, completa los abonos y copia la tabla al correo.</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2><span class="step">1</span> Pega la cartera (desde Excel)</h2>
+    <textarea id="raw" placeholder="RAZON SOCIAL	N° DOCTO	F EMISIÓN	F VENC,	MONEDA	TOTAL	ESTADO&#10;AUTOPISTA URBANA NORTE	F05570	09/07/2024	07/10/2024	MXN	7.308,00	DEBE"></textarea>
+    <p class="muted">Columnas reconocidas por encabezado: Razón Social, RFC, N° Docto/Factura/Folio, F Emisión, F Venc, Moneda, Total, Estado y (opcional) Abono, Fecha Abono, Saldo. Si no hay encabezado se asume el orden: Razón Social · Docto · Emisión · Vencimiento · Moneda · Total · Estado.</p>
+    <div class="row">
+      <button id="btnParse">Cargar datos</button>
+      <button class="secondary" id="btnSample">Usar ejemplo</button>
+      <span id="parseMsg"></span>
+    </div>
+  </section>
+
+  <section class="card" id="stepClient" hidden>
+    <h2><span class="step">2</span> Cliente y fecha de corte</h2>
+    <div class="grid">
+      <div><label for="client">Cliente</label><select id="client"></select></div>
+      <div><label for="rfc">RFC del cliente</label><input id="rfc" placeholder="Ej. HGC050809588"></div>
+      <div><label for="corte">Fecha de corte (define vencidas/vigentes)</label><input id="corte" type="date"></div>
+    </div>
+    <div style="margin-top:12px">
+      <label for="intro">Mensaje inicial del correo</label>
+      <textarea id="intro" style="min-height:70px;font-family:inherit;font-size:14px"></textarea>
+    </div>
+  </section>
+
+  <section class="card" id="stepRows" hidden>
+    <h2><span class="step">3</span> Revisa facturas y completa los abonos</h2>
+    <p class="muted">Desmarca las facturas que no quieras incluir. En las facturas <b>ABONADAS</b> indica el monto abonado y la fecha del abono: el saldo se calcula solo.</p>
+    <div class="tablewrap"><table class="edit" id="rowsTable"></table></div>
+    <div id="rowsMsg" style="margin-top:10px"></div>
+  </section>
+
+  <section class="card" id="stepPreview" hidden>
+    <h2><span class="step">4</span> Vista previa y copiar</h2>
+    <div class="row" style="margin:0 0 12px">
+      <button id="btnCopyRich">📋 Copiar para pegar en el correo</button>
+      <button class="secondary" id="btnCopyHtml">Copiar código HTML</button>
+      <span id="copyMsg"></span>
+    </div>
+    <div id="preview"></div>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>⚙️ Datos de pago (editables)</summary>
+      <div class="grid" style="margin-top:12px">
+        <div><label>Beneficiario</label><input data-pay="beneficiario"></div>
+        <div><label>RFC</label><input data-pay="rfc"></div>
+        <div><label>Banco</label><input data-pay="banco"></div>
+        <div><label>Cuenta Corriente Pesos</label><input data-pay="cuentaMXN"></div>
+        <div><label>Cuenta Corriente Dólares</label><input data-pay="cuentaUSD"></div>
+        <div><label>Enviar comprobante a</label><input data-pay="email"></div>
+      </div>
+      <p class="muted">Los cambios se recuerdan en este navegador. Para cambiarlos para todo el equipo, edita <code>PAGO_DEFAULT</code> en index.html.</p>
+    </details>
+  </section>
+</main>
+
+<script>
+/* ===== Configuración: datos de pago por defecto ===== */
+const PAGO_DEFAULT = {
+  beneficiario: "CHECADOR SA",
+  rfc: "CEC2005286R4",
+  banco: "BANORTE",
+  cuentaMXN: "1161438886",
+  cuentaUSD: "1161464960",
+  email: "cobranzamx@geovictoria.com"
+};
+const COLOR = { header: "#4BA3DB", vencido: "#C0392B", vigente: "#2B7FB8", abonoBg: "#FFF8E1", line: "#E5E7EB", text: "#333333" };
+
+const SAMPLE = `RAZON SOCIAL	N° DOCTO	F EMISIÓN	F VENC,	MONEDA	 TOTAL 	ESTADO
+AUTOPISTA URBANA NORTE	F05570	09/07/2024	07/10/2024	MXN	 7.308,00 	DEBE
+AUTOPISTA URBANA NORTE	FV-1-1227	09/01/2025	09/04/2025	MXN	 2.784,00 	ABONADO
+AUTOPISTA URBANA NORTE	FV-1-10579	01/09/2026	30/11/2026	MXN	 2.830,40 	DEBE
+AUTOPISTA URBANA NORTE	FV-1-11114	01/10/2026	30/12/2026	MXN	 3.883,68 	DEBE
+AUTOPISTA URBANA NORTE	FV-1-11669	03/11/2026	03/12/2026	MXN	 3.821,04 	DEBE`;
+
+const $ = s => document.querySelector(s);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+let invoices = [];          // todas las facturas pegadas
+let pago = Object.assign({}, PAGO_DEFAULT, store.get("pago", {}));
+let rfcs = store.get("rfcs", {});
+
+/* ===== Parseo ===== */
+const norm = s => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+
+function parseAmount(s) {
+  s = (s || "").replace(/[\s$]/g, "").replace(/[A-Za-z]/g, "");
+  if (!s) return null;
+  const neg = /^\(.*\)$/.test(s) || s.startsWith("-");
+  s = s.replace(/[()\-]/g, "");
+  const lc = s.lastIndexOf(","), ld = s.lastIndexOf(".");
+  if (lc > -1 && ld > -1) {
+    s = lc > ld ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  } else if (lc > -1) {
+    s = /,\d{1,2}$/.test(s) ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  } else if (ld > -1) {
+    if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? null : (neg ? -n : n);
+}
+
+function parseDate(s) {
+  s = (s || "").trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if (m) { let y = +m[3]; if (y < 100) y += 2000; return new Date(y, +m[2] - 1, +m[1]); }
+  return null;
+}
+const fmtDate = d => d ? `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}` : "";
+const isoDate = d => d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : "";
+const fmtMoney = n => (n == null || isNaN(n)) ? "" : "$" + n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function mapHeader(cells) {
+  const map = {};
+  cells.forEach((c, i) => {
+    const h = norm(c);
+    if (!h) return;
+    const set = k => { if (map[k] === undefined) map[k] = i; };
+    if (/FECHA (DE )?ABONO|F ABONO|FECHA PAGO|F PAGO/.test(h)) set("fabono");
+    else if (/VENC/.test(h)) set("venc");
+    else if (/EMISION|EMIS/.test(h)) set("emision");
+    else if (/RAZON|CLIENTE|NOMBRE/.test(h)) set("razon");
+    else if (/^RFC/.test(h)) set("rfc");
+    else if (/DOCTO|FOLIO|FACTURA|DOCUMENTO|N DOC/.test(h)) set("folio");
+    else if (/MONEDA|DIVISA/.test(h)) set("moneda");
+    else if (/SALDO|PENDIENTE/.test(h)) set("saldo");
+    else if (/ABONO|ABONADO|PAGADO/.test(h)) set("abono");
+    else if (/TOTAL|MONTO|IMPORTE/.test(h)) set("total");
+    else if (/ESTADO|STATUS|ESTATUS/.test(h)) set("estado");
+  });
+  return map;
+}
+
+function parseRaw(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.replace(/\t/g, "").trim());
+  if (!lines.length) return { rows: [], errors: ["No hay datos pegados."] };
+  const split = l => l.includes("\t") ? l.split("\t") : l.split(/;|\s{2,}/);
+  let map, start = 0;
+  const first = split(lines[0]);
+  const hm = mapHeader(first);
+  if (hm.folio !== undefined && hm.total !== undefined) { map = hm; start = 1; }
+  else map = { razon: 0, folio: 1, emision: 2, venc: 3, moneda: 4, total: 5, estado: 6 };
+
+  const rows = [], errors = [];
+  for (let i = start; i < lines.length; i++) {
+    const c = split(lines[i]).map(x => (x || "").trim());
+    const get = k => map[k] !== undefined ? c[map[k]] : "";
+    const total = parseAmount(get("total"));
+    const folio = get("folio");
+    if (!folio || total == null) { errors.push(`Fila ${i + 1} ignorada (sin folio o total).`); continue; }
+    const estado = norm(get("estado"));
+    let abono = parseAmount(get("abono"));
+    const saldo = parseAmount(get("saldo"));
+    if (abono == null && saldo != null && saldo < total) abono = +(total - saldo).toFixed(2);
+    const abonada = /ABON|PARCIAL/.test(estado) || (abono != null && abono > 0);
+    rows.push({
+      id: i, include: true,
+      razon: get("razon") || "(sin razón social)",
+      rfc: get("rfc"),
+      folio, total,
+      emision: parseDate(get("emision")),
+      venc: parseDate(get("venc")),
+      moneda: (get("moneda") || "MXN").toUpperCase(),
+      estado: get("estado"),
+      abonada,
+      abono: abono,
+      fabono: parseDate(get("fabono"))
+    });
+  }
+  return { rows, errors };
+}
+
+/* ===== UI ===== */
+function loadData() {
+  const { rows, errors } = parseRaw($("#raw").value);
+  invoices = rows;
+  const msg = $("#parseMsg");
+  if (!rows.length) { msg.className = "msg err"; msg.textContent = errors[0] || "No se reconocieron facturas."; return; }
+  const clients = [...new Set(rows.map(r => r.razon))];
+  msg.className = "msg ok";
+  msg.textContent = `${rows.length} facturas · ${clients.length} cliente(s)` + (errors.length ? ` · ${errors.length} fila(s) ignoradas` : "");
+  rows.forEach(r => { if (r.rfc && !rfcs[r.razon]) rfcs[r.razon] = r.rfc; });
+  const sel = $("#client");
+  sel.innerHTML = clients.map(c => `<option>${esc(c)}</option>`).join("");
+  ["#stepClient", "#stepRows", "#stepPreview"].forEach(s => $(s).hidden = false);
+  onClientChange();
+}
+
+function currentRows() {
+  const c = $("#client").value;
+  return invoices.filter(r => r.razon === c);
+}
+function corteDate() { return parseDate($("#corte").value) || new Date(new Date().toDateString()); }
+const isVencida = r => r.venc && r.venc < corteDate();
+
+function onClientChange() {
+  $("#rfc").value = rfcs[$("#client").value] || "";
+  renderRows();
+}
+
+function renderRows() {
+  const rows = currentRows().slice().sort((a, b) => (a.venc || 0) - (b.venc || 0));
+  const t = $("#rowsTable");
+  t.innerHTML = `<tr><th>Incluir</th><th>Factura</th><th>Emisión</th><th>Vencimiento</th><th>Moneda</th><th>Total</th><th>Situación</th><th>¿Abonada?</th><th>Monto abonado</th><th>Fecha abono</th><th>Saldo</th></tr>` +
+    rows.map(r => `<tr data-id="${r.id}">
+      <td><input type="checkbox" data-f="include" ${r.include ? "checked" : ""} style="width:auto"></td>
+      <td><b>${esc(r.folio)}</b></td>
+      <td>${fmtDate(r.emision)}</td>
+      <td>${fmtDate(r.venc)}</td>
+      <td>${esc(r.moneda)}</td>
+      <td>${fmtMoney(r.total)}</td>
+      <td>${isVencida(r) ? '<span class="pill venc">VENCIDA</span>' : '<span class="pill vig">VIGENTE</span>'}</td>
+      <td><input type="checkbox" data-f="abonada" ${r.abonada ? "checked" : ""} style="width:auto"></td>
+      <td><input type="number" step="0.01" min="0" data-f="abono" value="${r.abono ?? ""}" ${r.abonada ? "" : "disabled"} placeholder="0.00"></td>
+      <td><input type="date" data-f="fabono" value="${isoDate(r.fabono)}" ${r.abonada ? "" : "disabled"}></td>
+      <td data-saldo>${fmtMoney(saldoOf(r))}</td>
+    </tr>`).join("");
+  validate();
+  renderPreview();
+}
+
+function saldoOf(r) { return r.abonada && r.abono ? +(r.total - r.abono).toFixed(2) : r.total; }
+
+function validate() {
+  const issues = [];
+  currentRows().filter(r => r.include && r.abonada).forEach(r => {
+    if (!r.abono) issues.push(`${r.folio}: falta el monto abonado.`);
+    else if (r.abono >= r.total) issues.push(`${r.folio}: el abono cubre el total — ¿quieres excluirla?`);
+    if (!r.fabono) issues.push(`${r.folio}: falta la fecha del abono.`);
+  });
+  $("#rowsMsg").innerHTML = issues.length ? `<div class="msg warn">⚠️ ${issues.map(esc).join("<br>⚠️ ")}</div>` : "";
+}
+
+$("#rowsTable").addEventListener("input", e => {
+  const tr = e.target.closest("tr[data-id]"); if (!tr) return;
+  const r = invoices.find(x => x.id == tr.dataset.id); const f = e.target.dataset.f;
+  if (f === "include") r.include = e.target.checked;
+  if (f === "abonada") { r.abonada = e.target.checked; renderRows(); return; }
+  if (f === "abono") r.abono = parseFloat(e.target.value) || null;
+  if (f === "fabono") r.fabono = parseDate(e.target.value);
+  tr.querySelector("[data-saldo]").textContent = fmtMoney(saldoOf(r));
+  validate(); renderPreview();
+});
+
+/* ===== HTML del correo (estilos en línea para Outlook/Gmail) ===== */
+const TH = `background:${COLOR.header};color:#ffffff;font-weight:bold;padding:10px 12px;text-align:left;font-size:13px;border:1px solid ${COLOR.header};`;
+const TD = `padding:9px 12px;border-bottom:1px solid ${COLOR.line};font-size:13px;color:${COLOR.text};vertical-align:middle;`;
+const TDR = TD + "text-align:right;white-space:nowrap;";
+
+function buildTable(rows, tipo) {
+  const rfc = $("#rfc").value.trim();
+  const showAbono = rows.some(r => r.abonada && r.abono);
+  const corte = corteDate();
+  const cols = ["Razón Social", "RFC", "Factura", "Fecha de Emisión", "Fecha de Vencimiento"];
+  if (tipo === "venc") cols.push("Días Vencida");
+  cols.push("Moneda", "Total Factura");
+  if (showAbono) cols.push("Monto Abonado", "Fecha de Abono");
+  cols.push("Saldo Pendiente");
+
+  const head = cols.map(c => `<th style="${TH}">${c}</th>`).join("");
+  const body = rows.map(r => {
+    const ab = r.abonada && r.abono;
+    const bg = ab ? `background:${COLOR.abonoBg};` : "";
+    const dias = r.venc ? Math.round((corte - r.venc) / 86400000) : "";
+    let tds = `<td style="${TD}${bg}">${esc(r.razon)}</td><td style="${TD}${bg}">${esc(rfc)}</td>
+      <td style="${TD}${bg}white-space:nowrap;"><b>${esc(r.folio)}</b>${ab ? `<br><span style="font-size:11px;color:#8a6d00;">Abono parcial</span>` : ""}</td>
+      <td style="${TD}${bg}white-space:nowrap;">${fmtDate(r.emision)}</td><td style="${TD}${bg}white-space:nowrap;">${fmtDate(r.venc)}</td>`;
+    if (tipo === "venc") tds += `<td style="${TDR}${bg}color:${COLOR.vencido};">${dias}</td>`;
+    tds += `<td style="${TD}${bg}">${esc(r.moneda)}</td><td style="${TDR}${bg}">${fmtMoney(r.total)}</td>`;
+    if (showAbono) tds += ab
+      ? `<td style="${TDR}${bg}color:#1e8449;">${fmtMoney(r.abono)}</td><td style="${TD}${bg}white-space:nowrap;">${fmtDate(r.fabono) || "—"}</td>`
+      : `<td style="${TDR}${bg}color:#999;">—</td><td style="${TD}${bg}color:#999;">—</td>`;
+    tds += `<td style="${TDR}${bg}font-weight:bold;color:${tipo === "venc" ? COLOR.vencido : COLOR.text};">${fmtMoney(saldoOf(r))}</td>`;
+    return `<tr>${tds}</tr>`;
+  }).join("");
+
+  // Totales por moneda
+  const byCur = {};
+  rows.forEach(r => { byCur[r.moneda] = (byCur[r.moneda] || 0) + saldoOf(r); });
+  const totalRows = Object.entries(byCur).map(([m, v]) =>
+    `<tr><td colspan="${cols.length - 1}" style="${TDR}font-weight:bold;background:#F4F8FB;">Total ${tipo === "venc" ? "vencido" : "por vencer"} ${m}</td>
+     <td style="${TDR}font-weight:bold;background:#F4F8FB;color:${tipo === "venc" ? COLOR.vencido : COLOR.text};">${fmtMoney(v)}</td></tr>`).join("");
+
+  return `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;max-width:1000px;font-family:Arial,Helvetica,sans-serif;">
+    <thead><tr>${head}</tr></thead><tbody>${body}${totalRows}</tbody></table>`;
+}
+
+function buildEmail() {
+  const rows = currentRows().filter(r => r.include).sort((a, b) => (a.venc || 0) - (b.venc || 0));
+  const venc = rows.filter(isVencida), vig = rows.filter(r => !isVencida(r));
+  const P = `margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:${COLOR.text};line-height:1.5;`;
+  const H = (txt, color) => `<p style="margin:22px 0 8px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:${color};">${txt}</p>`;
+  let html = `<div style="font-family:Arial,Helvetica,sans-serif;color:${COLOR.text};">`;
+  const intro = $("#intro").value.trim();
+  if (intro) html += intro.split(/\n\s*\n/).map(p => `<p style="${P}">${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
+
+  if (venc.length) html += H(`⚠️ Facturas vencidas (${venc.length})`, COLOR.vencido) + buildTable(venc, "venc");
+  if (vig.length) html += H(`📅 Facturas vigentes – por vencer (${vig.length})`, COLOR.vigente) + buildTable(vig, "vig");
+  if (!rows.length) html += `<p style="${P}"><i>No hay facturas seleccionadas.</i></p>`;
+
+  if (rows.some(r => r.abonada && r.abono))
+    html += `<p style="margin:8px 0 0;font-size:12px;color:#8a6d00;font-family:Arial,Helvetica,sans-serif;">Las filas resaltadas corresponden a facturas con abono parcial: se indica el monto abonado, la fecha del abono y el saldo que aún queda pendiente.</p>`;
+
+  // Resumen
+  const sum = (arr) => arr.reduce((o, r) => (o[r.moneda] = (o[r.moneda] || 0) + saldoOf(r), o), {});
+  const sv = sum(venc), sg = sum(vig), st = sum(rows);
+  const curs = Object.keys(st);
+  if (rows.length) {
+    html += H("Resumen de saldo", COLOR.text) +
+      `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;min-width:320px;">
+        <tr><th style="${TH}">Concepto</th>${curs.map(c => `<th style="${TH}text-align:right;">${c}</th>`).join("")}</tr>
+        <tr><td style="${TD}">Saldo vencido</td>${curs.map(c => `<td style="${TDR}color:${COLOR.vencido};">${fmtMoney(sv[c] || 0)}</td>`).join("")}</tr>
+        <tr><td style="${TD}">Saldo por vencer</td>${curs.map(c => `<td style="${TDR}">${fmtMoney(sg[c] || 0)}</td>`).join("")}</tr>
+        <tr><td style="${TD}font-weight:bold;background:#F4F8FB;">Total adeudado</td>${curs.map(c => `<td style="${TDR}font-weight:bold;background:#F4F8FB;">${fmtMoney(st[c] || 0)}</td>`).join("")}</tr>
+      </table>`;
+  }
+
+  const LI = `margin:0 0 4px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:${COLOR.text};`;
+  html += `<p style="margin:24px 0 8px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:${COLOR.text};">📌 Datos de pago:</p>
+    <ul style="margin:0 0 16px;padding-left:22px;">
+      <li style="${LI}">Beneficiario: ${esc(pago.beneficiario)}</li>
+      <li style="${LI}">RFC: ${esc(pago.rfc)}</li>
+      <li style="${LI}">Banco: ${esc(pago.banco)}</li>
+      <li style="${LI}">Cuenta Corriente Pesos: ${esc(pago.cuentaMXN)}</li>
+      <li style="${LI}">Cuenta Corriente Dólares: ${esc(pago.cuentaUSD)}</li>
+      <li style="${LI}">Enviar comprobante a: <a href="mailto:${esc(pago.email)}" style="color:${COLOR.header};">${esc(pago.email)}</a></li>
+    </ul>
+    <p style="margin:0 0 4px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;color:${COLOR.text};">Importante</p>
+    <p style="${P}">Al realizar la transferencia, indica en el comentario o referencia el número de la factura que estás pagando.</p>
+  </div>`;
+  return html;
+}
+
+function renderPreview() { $("#preview").innerHTML = buildEmail(); }
+
+/* ===== Copiar ===== */
+function flash(text, ok = true) { const m = $("#copyMsg"); m.className = "msg " + (ok ? "ok" : "err"); m.textContent = text; setTimeout(() => { m.textContent = ""; m.className = ""; }, 3000); }
+
+$("#btnCopyRich").onclick = async () => {
+  const html = buildEmail();
+  try {
+    await navigator.clipboard.write([new ClipboardItem({
+      "text/html": new Blob([html], { type: "text/html" }),
+      "text/plain": new Blob([$("#preview").innerText], { type: "text/plain" })
+    })]);
+    flash("Copiado ✓ Pégalo directo en el cuerpo del correo (Ctrl/Cmd + V).");
+  } catch {
+    const range = document.createRange(); range.selectNodeContents($("#preview"));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    const ok = document.execCommand("copy"); sel.removeAllRanges();
+    flash(ok ? "Copiado ✓ Pégalo en el correo." : "No se pudo copiar automáticamente: selecciona la vista previa y copia.", ok);
+  }
+};
+$("#btnCopyHtml").onclick = async () => {
+  try { await navigator.clipboard.writeText(buildEmail()); flash("Código HTML copiado ✓"); }
+  catch { flash("No se pudo copiar el código.", false); }
+};
+
+/* ===== Eventos ===== */
+$("#btnParse").onclick = loadData;
+$("#btnSample").onclick = () => { $("#raw").value = SAMPLE; loadData(); };
+$("#client").onchange = onClientChange;
+$("#rfc").oninput = () => { rfcs[$("#client").value] = $("#rfc").value.trim(); store.set("rfcs", rfcs); renderPreview(); };
+$("#corte").oninput = () => { updateIntro(); renderRows(); };
+$("#intro").oninput = () => { $("#intro").dataset.edited = "1"; renderPreview(); };
+
+function updateIntro() {
+  if ($("#intro").dataset.edited) return;
+  $("#intro").value = `Estimado cliente:\n\nLe compartimos su estado de cuenta al ${fmtDate(corteDate())}. Le agradeceremos revisar las facturas vencidas y programar su pago a la brevedad. Si ya realizó el pago, por favor envíenos el comprobante para conciliarlo.`;
+}
+
+document.querySelectorAll("[data-pay]").forEach(inp => {
+  inp.value = pago[inp.dataset.pay] || "";
+  inp.oninput = () => { pago[inp.dataset.pay] = inp.value; store.set("pago", pago); if (invoices.length) renderPreview(); };
+});
+
+$("#corte").value = isoDate(new Date());
+updateIntro();
+</script>
+</body>
+</html>
