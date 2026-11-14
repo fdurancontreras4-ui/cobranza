@@ -58,9 +58,12 @@
 </style>
 </head>
 <body>
-<header>
-  <h1>Estado de Cuenta — Generador para correo</h1>
-  <p>Pega la cartera desde Excel, elige el cliente (una o varias razones sociales), completa los abonos y copia el estado de cuenta al correo.</p>
+<header style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+  <div>
+    <h1>Estado de Cuenta — Generador para correo</h1>
+    <p>Pega la cartera desde Excel, elige el cliente (una o varias razones sociales), completa los abonos y copia el estado de cuenta al correo.</p>
+  </div>
+  <button id="btnReset" style="background:#fff;color:#c0392b">🗑️ Borrar todo</button>
 </header>
 
 <main>
@@ -442,8 +445,8 @@ function buildEmail() {
   if (rows.some(r => r.abonada && r.abono))
     html += `<p style="margin:10px 0 0;font-size:12px;color:#8a6d00;${FONT}">Las filas resaltadas corresponden a facturas con abono parcial: se indica el monto abonado, la fecha del abono y el saldo que aún queda pendiente.</p>`;
 
-  // Resumen por razón social
-  if (rows.length) {
+  // Resumen por razón social (solo si hay más de una factura)
+  if (rows.length > 1) {
     const lines = [];
     groupByRazon(rows).forEach(([razon, list]) => {
       [...new Set(list.map(r => r.moneda))].forEach(m => {
@@ -510,6 +513,17 @@ $("#btnCopyHtml").onclick = async () => {
 /* ===== Eventos ===== */
 $("#btnParse").onclick = loadData;
 $("#btnSample").onclick = () => { $("#raw").value = SAMPLE; loadData(); };
+$("#btnReset").onclick = () => {
+  if (invoices.length && !confirm("¿Borrar todo y empezar de nuevo?")) return;
+  invoices = []; clients = []; selected.clear();
+  $("#raw").value = ""; $("#search").value = "";
+  $("#parseMsg").textContent = ""; $("#parseMsg").className = "";
+  $("#clientList").innerHTML = ""; $("#rowsTable").innerHTML = ""; $("#rowsMsg").innerHTML = ""; $("#preview").innerHTML = "";
+  ["#stepClient", "#stepRows", "#stepPreview"].forEach(s => $(s).hidden = true);
+  $("#corte").value = isoDate(new Date());
+  delete $("#intro").dataset.edited; updateIntro();
+  window.scrollTo(0, 0); $("#raw").focus();
+};
 $("#corte").oninput = () => { updateIntro(); renderRows(); };
 $("#intro").oninput = () => { $("#intro").dataset.edited = "1"; renderPreview(); };
 
