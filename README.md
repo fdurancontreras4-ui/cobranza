@@ -13,7 +13,7 @@ El correo separa automáticamente **facturas vencidas** (con días de atraso) y 
 ## Publicar en GitHub Pages
 1. Crea un repositorio y sube `index.html` y este `README.md`.
 2. En el repo: **Settings → Pages → Build and deployment → Deploy from a branch**, rama `main`, carpeta `/ (root)`.
-3. Comparte la URL `https://<usuario>.github.io/<repo>/` con la ejecutiva.
+3. Comparte la URL `https://fdurancontreras4-ui.github.io/cobranza/` con la ejecutiva.
 
 > Los datos de la cartera **no se suben a ningún lado**: todo se procesa en el navegador. Si el repo es público, el código (incluidos los datos bancarios de `PAGO_DEFAULT`) será visible; esos datos ya se envían a clientes, pero puedes usar un repo privado si lo prefieres.
 
