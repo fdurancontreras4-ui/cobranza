@@ -70,7 +70,7 @@
   <section class="card">
     <h2><span class="step">1</span> Pega la cartera (desde Excel)</h2>
     <textarea id="raw" placeholder="RAZON SOCIAL	N° DOCTO	F EMISIÓN	F VENC,	MONEDA	TOTAL	ESTADO	MONTO PAGADO	FECHA DE PAGO	BANCO"></textarea>
-    <p class="muted">Columnas reconocidas por encabezado: Razón Social, RFC, N° Docto, F Emisión, F Venc, Moneda, Total, Estado, Monto Pagado / Abono, Fecha de Pago / Abono, Saldo, Banco. Las facturas <b>CANCELADAS</b> o pagadas por completo se dejan fuera automáticamente. Filas sin estado se toman como <b>DEBE</b>.</p>
+    <p class="muted">Columnas reconocidas por encabezado: Razón Social, RFC, N° Docto, F Emisión, F Venc, Moneda, Total, Estado, Monto Pagado / Abono, Fecha de Pago / Abono, Saldo, Banco. Las facturas <b>CANCELADAS</b> o pagadas por completo se dejan fuera automáticamente. Filas sin estado se toman como <b>DEBE</b>. Si pegas sin encabezado se asume el orden: Razón Social · Docto · Emisión · Vencimiento · Moneda · Total · Estado · Monto Pagado · Fecha de Pago · Banco.</p>
     <div class="row">
       <button id="btnParse">Cargar datos</button>
       <button class="secondary" id="btnSample">Usar ejemplo</button>
@@ -228,7 +228,8 @@ function parseRaw(text) {
   let map, start = 0;
   const hm = mapHeader(split(lines[0]));
   if (hm.folio !== undefined && hm.total !== undefined) { map = hm; start = 1; }
-  else map = { razon: 0, folio: 1, emision: 2, venc: 3, moneda: 4, total: 5, estado: 6 };
+  // Sin encabezado: orden estándar de la cartera
+  else map = { razon: 0, folio: 1, emision: 2, venc: 3, moneda: 4, total: 5, estado: 6, abono: 7, fabono: 8, banco: 9 };
 
   const rows = [], errors = [];
   let omitidas = 0;
