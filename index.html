@@ -93,7 +93,8 @@
     <p class="muted">Marca todas las razones sociales del mismo cliente: el correo arma una tabla por cada una. El RFC se recuerda en este navegador.</p>
     <div style="margin-top:12px">
       <label for="intro">Mensaje inicial del correo</label>
-      <textarea id="intro" style="min-height:70px;font-family:inherit;font-size:14px"></textarea>
+      <textarea id="intro" style="min-height:90px;font-family:inherit;font-size:14px"></textarea>
+      <p class="muted">Se reemplazan solos: <code>{fecha}</code> = fecha de corte · <code>{total}</code> = total de deuda · <code>{vencido}</code> = total vencido (en negrita).</p>
     </div>
   </section>
 
@@ -437,7 +438,13 @@ function buildEmail() {
   const P = `margin:0 0 12px;${FONT}font-size:14px;color:${COLOR.text};line-height:1.5;`;
   let html = `<div style="${FONT}color:${COLOR.text};">`;
   const intro = $("#intro").value.trim();
-  if (intro) html += intro.split(/\n\s*\n/).map(p => `<p style="${P}">${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
+  const totDeuda = curText(sumByCur(rows)) || "$0.00";
+  const totVencido = curText(sumByCur(venc)) || "$0.00";
+  if (intro) html += intro.split(/\n\s*\n/).map(p => `<p style="${P}">${esc(p)
+    .replace(/\{fecha\}/g, fmtDate(corteDate()))
+    .replace(/\{total\}/g, totDeuda)
+    .replace(/\{vencido\}/g, `<b>${totVencido}</b>`)
+    .replace(/\n/g, "<br>")}</p>`).join("");
 
   if (venc.length) html += buildSection(venc, "venc");
   if (vig.length) html += buildSection(vig, "vig");
@@ -530,7 +537,7 @@ $("#intro").oninput = () => { $("#intro").dataset.edited = "1"; renderPreview();
 
 function updateIntro() {
   if ($("#intro").dataset.edited) return;
-  $("#intro").value = `Estimado cliente:\n\nLe compartimos su estado de cuenta al ${fmtDate(corteDate())}. Le agradeceremos revisar las facturas vencidas y programar su pago a la brevedad. Si ya realizó el pago, por favor envíenos el comprobante para conciliarlo.`;
+  $("#intro").value = `Estimado cliente:\n\nLe compartimos su estado de cuenta al {fecha}. Su total de deuda es {total}, total deuda vencida {vencido}.\nLe agradecemos revisar las facturas vencidas y programar su pago a la brevedad. Si ya realizó el pago, por favor envíenos el comprobante para conciliarlo.`;
 }
 
 document.querySelectorAll("[data-pay]").forEach(inp => {
